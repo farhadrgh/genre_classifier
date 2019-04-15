@@ -54,7 +54,7 @@ def get_features(file_path, genre):
 
 # MPI initialize the world
 comm = MPI.COMM_WORLD
-print("Rank %d/%d running on %s ..." % (comm.rank, comm.size, sys.argv[1]))
+print("Rank %d from %d running in total..." % (comm.rank, comm.size))
 
 data = []
 for g in genres:
@@ -86,6 +86,10 @@ for g in genres:
 data = comm.gather(data, root=0) # list of data lists
 
 if comm.rank == 0:
+
+    dt = time() - t0
+    print(f'Program finished processing {sys.argv[1]} in {dt} seconds')
+
     header = 'chroma_stft rmse spectral_centroid spectral_bandwidth rolloff zero_crossing_rate name'
     for i in range(1, 21):
         header += f' mfcc{i}'
@@ -100,5 +104,3 @@ if comm.rank == 0:
             for to_append in data[rank]:
                 writer.writerow(to_append.split())
 
-dt = time() - t0
-print(f'Program finished processing {sys.argv[1]} in {dt} seconds')
