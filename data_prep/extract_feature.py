@@ -90,10 +90,10 @@ if comm.rank == 0:
     dt = time() - t0
     print(f'Program finished processing {sys.argv[1]} in {dt} seconds')
 
-    header = 'chroma_stft rmse spectral_centroid spectral_bandwidth rolloff zero_crossing_rate name'
+    header = 'chroma_stft rmse spectral_centroid spectral_bandwidth rolloff zero_crossing_rate'
     for i in range(1, 21):
         header += f' mfcc{i}'
-    header += ' label'
+    header += ' label name'
     header = header.split()
     
     file = open(out_file, 'w', newline='')
