@@ -1,4 +1,4 @@
 *.mp3
 command
-_validation.npy
-_train.npy
+*.npy
+*.csv
