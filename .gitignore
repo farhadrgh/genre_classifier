@@ -1,5 +1,5 @@
 nohup.out
-logs/
+*.h5
 *.mp3
 command
 *.npy
