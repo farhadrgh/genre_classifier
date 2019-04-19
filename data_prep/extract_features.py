@@ -90,10 +90,10 @@ def get_part_features_LSTM(file_path, genre):
     ts_length = 256
     hop_length = 512
     sr = 22050
-    skip_length = 30
+    skip_length = 10
 
     tot_length = librosa.get_duration(filename=file_path, sr=sr) # get duration in sec 
-    n_samples = int(tot_length // 60)  # one sample every 60 second
+    n_samples = int(tot_length // 30)  # one sample every 60 second
 
     if n_samples == 0: # songs less than 60
         n_samples = 1
@@ -105,7 +105,7 @@ def get_part_features_LSTM(file_path, genre):
     
     for n in range(n_samples):
         
-        offset = skip_length + (n * 60)
+        offset = skip_length + (n * 30)
         y, sr = librosa.load(file_path, sr=sr, offset=offset , duration=duration , mono=True)
         
         mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=hop_length, n_mfcc=13)
@@ -120,7 +120,7 @@ def get_part_features_LSTM(file_path, genre):
         data[n, :, 13:14] = spectral_cent.T[0:ts_length, :]
         data[n, :, 14:26] = chroma_stft.T[0:ts_length, :]
         data[n, :, 26:33] = spectral_cont.T[0:ts_length, :]
-    
+        
     return (data, target)
 
 
