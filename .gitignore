@@ -1,0 +1,6 @@
+nohup.out
+logs/
+*.mp3
+command
+*.npy
+*.csv
