@@ -27,7 +27,6 @@ import csv
 import itertools
 
 import numpy as np
-import pandas as pd
 import librosa
 
 from mpi4py import MPI
@@ -93,22 +92,21 @@ def get_part_features_LSTM(file_path, genre):
     skip_length = 10
 
     tot_length = librosa.get_duration(filename=file_path, sr=sr) # get duration in sec 
-    n_samples = int(tot_length // 30)  # one sample every 60 second
+    n_samples = int(tot_length // 10) - 1 # one sample every 10 second
 
-    if n_samples == 0: # songs less than 60
+    if n_samples == 0: # songs less than 10
         n_samples = 1
 
-    data = np.zeros((n_samples, ts_length, 33), dtype=np.float64)
+    data = np.zeros((n_samples, ts_length, 40), dtype=np.float64)
     target = np.zeros((n_samples, 1))
 
     duration = ts_length * hop_length/sr + 0.5 # seconds
     
     for n in range(n_samples):
-        
-        offset = skip_length + (n * 30)
+        offset = skip_length + (n * 10)
         y, sr = librosa.load(file_path, sr=sr, offset=offset , duration=duration , mono=True)
         
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=hop_length, n_mfcc=13)
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=hop_length, n_mfcc=20)
         spectral_cent = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)
         chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length)
         spectral_cont = librosa.feature.spectral_contrast(y=y, sr=sr, hop_length=hop_length)
@@ -116,10 +114,10 @@ def get_part_features_LSTM(file_path, genre):
         if genre == 'prog': target[n] = 1
         else: target[n] = 0
 
-        data[n, :, 0:13] = mfcc.T[0:ts_length, :]
-        data[n, :, 13:14] = spectral_cent.T[0:ts_length, :]
-        data[n, :, 14:26] = chroma_stft.T[0:ts_length, :]
-        data[n, :, 26:33] = spectral_cont.T[0:ts_length, :]
+        data[n, :, 0:20] = mfcc.T[0:ts_length, :]
+        data[n, :, 20:21] = spectral_cent.T[0:ts_length, :]
+        data[n, :, 21:33] = chroma_stft.T[0:ts_length, :]
+        data[n, :, 33:40] = spectral_cont.T[0:ts_length, :]
         
     return (data, target)
 
