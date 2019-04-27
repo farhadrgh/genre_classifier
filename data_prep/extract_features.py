@@ -1,17 +1,16 @@
 #!/usr/bin/env python
 
 """
-Extract features from music files for the following networks:
-    LSTM + attention transformer
-    DNN
+Extract features from mp3
 
-mpirun -np <#> --use-hwthread-cpus python extract_feature.py <dataset name>
-mpirun -np  8  --use-hwthread-cpus python extract_feature.py train
+mpirun -np <#> --use-hwthread-cpus python extract_features.py <dataset name>
+mpirun -np  8  --use-hwthread-cpus python extract_features.py train
+depending on OS python -u to force writout
 
 Returns:
 
-    _train.npy if LSTM == True
-    _train.csv if LSTM == False
+    _train.npy if GRID == True   for LSTM, Conv1D
+    _train.csv if GRID == False  for DNN, RandomForest
 
 Dir tree:
     ./_train/
@@ -19,7 +18,6 @@ Dir tree:
     ./_test/
             prog/
             nonprog/
-
 """
 
 import os, sys
@@ -32,9 +30,8 @@ import librosa
 from mpi4py import MPI
 from time import time
 
-LSTM = True
-LOC = f'./_{sys.argv[1]}' # train validation
-out_file = f'_{sys.argv[1]}.csv'
+GRID = True
+LOC = f'./_{sys.argv[1]}'           # train validation test
 genres = 'prog nonprog'.split()
 
 t0 = time()
@@ -59,70 +56,56 @@ def get_features(file_path, genre):
     return to_append
 
 
-def get_features_LSTM(file_path, genre):
+def get_part_features(file_path, genre):
 
-    ts_length = 128
-    data = np.zeros((ts_length, 33), dtype=np.float64)
-
-    y, sr = librosa.load(file_path, mono=True)
-    ten_sec = 10*sr
-    y = y[ten_sec:-ten_sec]
-
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=512, n_mfcc=13)
-    spectral_cent = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=512)
-    chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=512)
-    spectral_cont = librosa.feature.spectral_contrast(y=y, sr=sr, hop_length=512)
-
-    if genre == 'prog': target = 1
-    else: target = 0
-
-    data[:, 0:13] = mfcc.T[0:ts_length, :]
-    data[:, 13:14] = spectral_cent.T[0:ts_length, :]
-    data[:, 14:26] = chroma_stft.T[0:ts_length, :]
-    data[:, 26:33] = spectral_cont.T[0:ts_length, :]
-
-    return (data, target)
-
-
-def get_part_features_LSTM(file_path, genre):
-
-    ts_length = 256
-    hop_length = 512
-    sr = 22050
-    skip_length = 10
-
-    tot_length = librosa.get_duration(filename=file_path, sr=sr) # get duration in sec 
-    n_samples = int(tot_length // 10) - 1 # one sample every 10 second
-
-    if n_samples == 0: # songs less than 10
+    sr = 22050         # sample rate: #samples/sec
+    ts_length  = 256   # time series length of each datapoint
+    hop_length = 512   # number of samples in each frame of ts
+    part_len = 10 * sr # #samples in 10s portions
+    offset   = 10      # skip first 10 sec of song
+    
+    y, sr = librosa.load(file_path, sr=sr, offset=offset, mono=True)
+    tot_length = len(y) - offset * sr  #samples (except last 10s)
+    n_parts = (tot_length // part_len) # 1 sample every part_len
+        
+    if n_parts == 0:  # songs less than part_len
         n_samples = 1
 
-    data = np.zeros((n_samples, ts_length, 40), dtype=np.float64)
-    target = np.zeros((n_samples, 1))
+    data = np.zeros((n_parts, ts_length, 43), dtype=np.float64)
+    target = np.zeros((n_parts, 1))
 
-    duration = ts_length * hop_length/sr + 0.5 # seconds
+    duration = ts_length * hop_length #samples per part ~ 6s
     
-    for n in range(n_samples):
-        offset = skip_length + (n * 10)
-        y, sr = librosa.load(file_path, sr=sr, offset=offset , duration=duration , mono=True)
+    for n in range(n_parts):
+        start = n * part_len
+        end   = start + duration  
+        part = y[start:end]
+
+        mfcc = librosa.feature.mfcc(y=part, sr=sr, hop_length=hop_length, n_mfcc=20)
+        spectral_cent = librosa.feature.spectral_centroid(y=part, sr=sr, hop_length=hop_length)
+        chroma_stft   = librosa.feature.chroma_stft(y=part, sr=sr, hop_length=hop_length)
+        spectral_cont = librosa.feature.spectral_contrast(y=part, sr=sr, hop_length=hop_length)
         
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=hop_length, n_mfcc=20)
-        spectral_cent = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)
-        chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length)
-        spectral_cont = librosa.feature.spectral_contrast(y=y, sr=sr, hop_length=hop_length)
+        rmse = librosa.feature.rmse(y=part, hop_length=hop_length)
+        rolloff = librosa.feature.spectral_rolloff(y=part, sr=sr, hop_length=hop_length)
+        zcr = librosa.feature.zero_crossing_rate(y=part, hop_length=hop_length)
 
         if genre == 'prog': target[n] = 1
         else: target[n] = 0
 
-        data[n, :, 0:20] = mfcc.T[0:ts_length, :]
+        data[n, :, 0:20]  = mfcc.T[0:ts_length, :]
         data[n, :, 20:21] = spectral_cent.T[0:ts_length, :]
         data[n, :, 21:33] = chroma_stft.T[0:ts_length, :]
         data[n, :, 33:40] = spectral_cont.T[0:ts_length, :]
-        
+        data[n, :, 40:41] = rmse.T[0:ts_length, :]
+        data[n, :, 41:42] = rolloff.T[0:ts_length, :]
+        data[n, :, 42:43] = zcr.T[0:ts_length, :]
+
     return (data, target)
 
 
-# MPI initialize the world
+# MPI processes
+# initialize the world
 comm = MPI.COMM_WORLD
 print("Rank %d from %d running in total..." % (comm.rank, comm.size))
 
@@ -142,14 +125,14 @@ for g in genres:
     for filename in file_arr:
         index = file_arr.tolist().index(filename) + 1
 
-        if LSTM == False:
+        if GRID == False:
             to_append = get_features(f'{LOC}/{g}/{filename}', f'{g}')
             to_append += f' {filename.replace(" ", "")}'
 
-        elif LSTM == True:
+        elif GRID == True:
             # to_append (np.array, int)
             try:
-                array, target = get_part_features_LSTM(f'{LOC}/{g}/{filename}', f'{g}')
+                array, target = get_part_features(f'{LOC}/{g}/{filename}', f'{g}')
                 to_append = [array, target, f' {filename.replace(" ", "")}']
             except:
                 print(f'Error: Something is wrong with {filename}')
@@ -165,30 +148,33 @@ for g in genres:
 # gather data from all ranks to 0
 data = comm.gather(data, root=0) # list of data lists
 if comm.rank == 0:
+    print(f'Writing the _{sys.argv[1]} file ...')
 
-    dt = time() - t0
-    print(f'Program finished processing {sys.argv[1]} in {dt/60} minutes')
-
-    header = 'chroma_stft rmse spectral_centroid spectral_bandwidth rolloff zero_crossing_rate'
-    for i in range(1, 21):
-        header += f' mfcc{i}'
-    header += ' label name'
-    header = header.split()
-
-    if LSTM == True:
-        # in each rank: X = [(np.array, int)], data is [ Xi ]
+    if GRID == True:
+        # in each rank: Xr = [(np.array, int)], data is [ Xr ]
+        # out_data is now merged ranks into list of tuples [()]
         out_data = list(itertools.chain.from_iterable(data))
-        # out_data is now metged ranks into [()i]
 
-        np.save(f'_{sys.argv[1]}', out_data)
         # after loading data = np.array('data.npy')
         # stack or concat data[:,0] >> arrays
+        np.save(f'_{sys.argv[1]}', out_data)
 
-    elif LSTM == False:
-        file = open(out_file, 'w', newline='')
+    elif GRID == False:
+
+        header = 'chroma_stft rmse spectral_centroid spectral_bandwidth rolloff zero_crossing_rate'
+        for i in range(1, 21):
+            header += f' mfcc{i}'
+        header += ' label name'
+        header = header.split()
+
+        file = open(f'_{sys.argv[1]}.csv', 'w', newline='')
         with file:
             writer = csv.writer(file)
             writer.writerow(header)
             for rank in range(comm.size):
                 for to_append in data[rank]:
                     writer.writerow(to_append.split())
+
+    dt = time() - t0
+    print(f'Program finished processing {sys.argv[1]} in {dt/60} minutes')
+
