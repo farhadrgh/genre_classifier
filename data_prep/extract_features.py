@@ -61,22 +61,36 @@ def get_part_features(file_path, genre):
     sr = 22050         # sample rate: #samples/sec
     ts_length  = 256   # time series length of each datapoint
     hop_length = 512   # number of samples in each frame of ts
-    part_len = 10 * sr # #samples in 10s portions
+    #part_len = 10 * sr # #samples in 10s portions
     offset   = 10      # skip first 10 sec of song
     
+    # to fixed imbalanced dataset
+    if genre == 'prog':
+        part_len = 8 * sr
+    elif genre == 'nonprog':
+        part_len = 12 * sr
+ 
     y, sr = librosa.load(file_path, sr=sr, offset=offset, mono=True)
     tot_length = len(y) - offset * sr  #samples (except last 10s)
     n_parts = (tot_length // part_len) # 1 sample every part_len
         
     if n_parts == 0:  # songs less than part_len
-        n_samples = 1
+        n_parts = 1
+
 
     data = np.zeros((n_parts, ts_length, 43), dtype=np.float64)
     target = np.zeros((n_parts, 1))
 
     duration = ts_length * hop_length #samples per part ~ 6s
     
+    # 5x dataset
+    #starts = np.random.randint(low=0, 
+    #                          high = tot_length, 
+    #                          size = 5 * n_parts)
+
+    
     for n in range(n_parts):
+        
         start = n * part_len
         end   = start + duration  
         part = y[start:end]
@@ -100,7 +114,7 @@ def get_part_features(file_path, genre):
         data[n, :, 40:41] = rmse.T[0:ts_length, :]
         data[n, :, 41:42] = rolloff.T[0:ts_length, :]
         data[n, :, 42:43] = zcr.T[0:ts_length, :]
-
+        
     return (data, target)
 
 
