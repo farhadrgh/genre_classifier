@@ -17,7 +17,8 @@ dir tree:
             nonprog/
 """
 
-import os, sys
+import os
+import sys
 import itertools
 
 import numpy as np
@@ -30,6 +31,7 @@ LOC = f'./_{sys.argv[1]}'           # train validation test
 genres = 'prog nonprog'.split()
 
 t0 = time()
+
 
 def get_raw(filename, genre):
     file_path = f'{LOC}/{genre}/{filename}'
@@ -65,7 +67,7 @@ for genre in genres:
 
 
 # gather data from all ranks to 0
-data = comm.gather(data, root=0) # list of data lists
+data = comm.gather(data, root=0)  # list of data lists
 if comm.rank == 0:
     print(f'Writing the raw_{sys.argv[1]} file ...')
 
